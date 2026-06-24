@@ -24,6 +24,7 @@ jobs:
           echo "===== DEPLOY START ====="
           sudo apt update -y
           sudo apt install -y git
+          sudo mkdir -p /var/www
           cd /var/www
           if [ ! -d "laravel-todo" ]; then
               sudo git clone https://github.com/devktops/laravel-todo.git
