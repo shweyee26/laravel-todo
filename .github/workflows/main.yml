@@ -3,7 +3,7 @@ name: Deploy to Lightsail Ubuntu
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:
