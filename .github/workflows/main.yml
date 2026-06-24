@@ -21,25 +21,31 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
+          echo "===== DEPLOY START ====="
+        
+          echo "===== INSTALLING APACHE ====="
           sudo DEBIAN_FRONTEND=noninteractive apt update -y
           sudo DEBIAN_FRONTEND=noninteractive apt install -y git apache2
-          
           sudo systemctl enable apache2
           sudo systemctl start apache2
 
+          echo "===== UPDATING CODE FROM GIT ====="
           sudo mkdir -p /var/www
-          cd /var/www
-          if [ ! -d "laravel-todo" ]; then
+          
+          if [ -d "/home/ubuntu/laravel-todo" ]; then
+              sudo mv /home/ubuntu/laravel-todo /var/www/
+          fi
+
+          if [ ! -d "/var/www/laravel-todo" ]; then
+              cd /var/www
               sudo git clone https://github.com/devktops/laravel-todo.git
           else
-              cd laravel-todo
+              cd /var/www/laravel-todo
               sudo git pull origin main
           fi
 
           cd /var/www/laravel-todo
-          
           echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
-          
           sudo composer install --no-dev --optimize-autoloader --no-interaction
           sudo php artisan key:generate --force
           sudo php artisan migrate --force
@@ -49,6 +55,7 @@ jobs:
           sudo chmod -R 775 /var/www/laravel-todo/storage
           sudo chmod -R 775 /var/www/laravel-todo/bootstrap/cache
 
+          echo "===== CONFIGURING APACHE SITE ====="
           sudo sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/laravel-todo/public|g' /etc/apache2/sites-available/000-default.conf
           
           if ! grep -q "<Directory /var/www/laravel-todo/public>" /etc/apache2/sites-available/000-default.conf; then
@@ -56,7 +63,8 @@ jobs:
             <Directory /var/www/laravel-todo/public>\n    Options Indexes FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>' /etc/apache2/sites-available/000-default.conf
           fi
 
-          sudo a2enmod rewrite
           sudo systemctl restart apache2
 
+          echo "===== FILES AFTER DEPLOY ====="
           ls -la /var/www/laravel-todo
+          echo "===== DEPLOYMENT SUCCESSFUL ====="
