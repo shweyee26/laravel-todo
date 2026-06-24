@@ -33,5 +33,11 @@ jobs:
               sudo git pull origin main
               cd ..
           fi
+          echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+          sudo composer install --no-dev --optimize-autoloader --no-interaction
+          sudo php artisan key:generate --force
+          sudo php artisan migrate --force
+          sudo chown -R www-data:www-data storage bootstrap/cache
+          sudo chmod -R 775 storage bootstrap/cache
           echo "===== FILES AFTER DEPLOY ====="
           ls -la /var/www/laravel-todo
