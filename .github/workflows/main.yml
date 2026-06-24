@@ -1,0 +1,43 @@
+name: Deploy to Lightsail Ubuntu
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        script: |
+
+          echo "===== DEPLOY START ====="
+
+          # install git if not exists
+          sudo apt update -y
+          sudo apt install -y git
+
+          # folder
+          cd /var/www
+
+          # clone or update repo
+          if [ ! -d "laravel-todo" ]; then
+              sudo git clone https://github.com/devktops/laravel-todo.git
+          else
+              cd laravel-todo
+              sudo git pull origin main
+              cd ..
+          fi
+
+          echo "===== FILES AFTER DEPLOY ====="
+          ls -la /var/www/laravel-todo
