@@ -75,12 +75,23 @@ jobs:
             # =========================
             sudo composer install --no-dev --optimize-autoloader --no-interaction
 
-            # =========================
+             # =========================
             # 6. Frontend dependencies (IMPORTANT)
             # =========================
+
+            # Fix npm permission
+            sudo chown -R ubuntu:ubuntu /var/www/laravel-todo
+
+            # Install frontend dependencies
             npm install
+
+            # Build Vite assets
             npm run build
 
+            # Return ownership to Apache
+            sudo chown -R www-data:www-data /var/www/laravel-todo
+
+            
             # =========================
             # 7. Laravel commands
             # =========================
@@ -88,12 +99,13 @@ jobs:
             php artisan optimize:clear
             php artisan migrate --force || true
 
-            # =========================
+                       # =========================
             # 8. Permissions
             # =========================
             sudo chown -R www-data:www-data /var/www/laravel-todo
             sudo chmod -R 775 storage bootstrap/cache
 
+            
             # =========================
             # 9. Apache Configuration
             # =========================
