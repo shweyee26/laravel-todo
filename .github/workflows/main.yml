@@ -19,6 +19,7 @@ jobs:
         host: ${{ secrets.SERVER_IP }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.PORT }}
         script: |
 
           echo "===== DEPLOY START ====="
