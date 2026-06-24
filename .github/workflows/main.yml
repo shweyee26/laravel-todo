@@ -30,27 +30,15 @@ jobs:
           sudo apt update -y
 
           sudo DEBIAN_FRONTEND=noninteractive apt install -y \
-            git \
-            apache2 \
-            php \
-            php-cli \
-            php-mbstring \
-            php-xml \
-            php-bcmath \
-            php-curl \
-            php-mysql \
-            php-zip \
-            php-gd \
-            php-intl \
-            unzip \
-            curl
+            git apache2 \
+            php php-cli php-mbstring php-xml php-bcmath php-curl php-mysql \
+            php-zip php-gd php-intl unzip curl
 
           # =========================
           # 2. COMPOSER
           # =========================
           if ! command -v composer &> /dev/null
           then
-            echo "Installing Composer..."
             curl -sS https://getcomposer.org/installer | php
             sudo mv composer.phar /usr/local/bin/composer
           fi
@@ -73,7 +61,7 @@ jobs:
           fi
 
           # =========================
-          # 4. LARAVEL SETUP
+          # 4. LARAVEL SETUP (IMPORTANT FIX PART)
           # =========================
           cd /var/www/laravel-todo
 
@@ -81,21 +69,26 @@ jobs:
 
           sudo composer install --no-dev --optimize-autoloader --no-interaction
 
-          sudo php artisan key:generate --force || true
-          sudo php artisan config:clear
-          sudo php artisan cache:clear
-          sudo php artisan route:clear
+          php artisan key:generate --force || true
 
-          sudo php artisan migrate --force
+          # CLEAR EVERYTHING (IMPORTANT FOR 500 FIX)
+          php artisan optimize:clear
 
           # =========================
-          # 5. PERMISSIONS (FIXED)
+          # 5. PERMISSIONS (CRITICAL FIX)
           # =========================
           sudo chown -R www-data:www-data /var/www/laravel-todo
           sudo chmod -R 777 storage bootstrap/cache
 
           # =========================
-          # 6. SAFE APACHE CONFIG
+          # 6. CACHE REBUILD (IMPORTANT FIX)
+          # =========================
+          php artisan config:cache || true
+          php artisan route:cache || true
+          php artisan view:cache || true
+
+          # =========================
+          # 7. APACHE CONFIG
           # =========================
           sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
           <VirtualHost *:80>
@@ -103,7 +96,6 @@ jobs:
               DocumentRoot /var/www/laravel-todo/public
 
               <Directory /var/www/laravel-todo/public>
-                  Options Indexes FollowSymLinks
                   AllowOverride All
                   Require all granted
               </Directory>
@@ -114,16 +106,14 @@ jobs:
           EOF
 
           # =========================
-          # 7. APACHE SAFE RESTART
+          # 8. APACHE SAFE RESTART
           # =========================
           sudo a2enmod rewrite
           sudo apache2ctl configtest
           sudo systemctl restart apache2
 
           # =========================
-          # 8. FINAL CHECK
+          # 9. FINAL CHECK
           # =========================
-          echo "===== FILE LIST ====="
-          ls -la /var/www/laravel-todo
-
           echo "===== DEPLOY DONE ====="
+          ls -la /var/www/laravel-todo
