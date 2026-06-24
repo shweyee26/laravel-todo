@@ -21,9 +21,12 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
-          echo "===== DEPLOY START ====="
-          sudo apt update -y
-          sudo apt install -y git
+          sudo DEBIAN_FRONTEND=noninteractive apt update -y
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y git apache2
+          
+          sudo systemctl enable apache2
+          sudo systemctl start apache2
+
           sudo mkdir -p /var/www
           cd /var/www
           if [ ! -d "laravel-todo" ]; then
@@ -31,13 +34,29 @@ jobs:
           else
               cd laravel-todo
               sudo git pull origin main
-              cd ..
           fi
+
+          cd /var/www/laravel-todo
+          
           echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+          
           sudo composer install --no-dev --optimize-autoloader --no-interaction
           sudo php artisan key:generate --force
           sudo php artisan migrate --force
-          sudo chown -R www-data:www-data storage bootstrap/cache
-          sudo chmod -R 775 storage bootstrap/cache
-          echo "===== FILES AFTER DEPLOY ====="
+
+          echo "===== SETTING PERMISSIONS ====="
+          sudo chown -R www-data:www-data /var/www/laravel-todo
+          sudo chmod -R 775 /var/www/laravel-todo/storage
+          sudo chmod -R 775 /var/www/laravel-todo/bootstrap/cache
+
+          sudo sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/laravel-todo/public|g' /etc/apache2/sites-available/000-default.conf
+          
+          if ! grep -q "<Directory /var/www/laravel-todo/public>" /etc/apache2/sites-available/000-default.conf; then
+            sudo sed -i '/<\/VirtualHost>/i \
+            <Directory /var/www/laravel-todo/public>\n    Options Indexes FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>' /etc/apache2/sites-available/000-default.conf
+          fi
+
+          sudo a2enmod rewrite
+          sudo systemctl restart apache2
+
           ls -la /var/www/laravel-todo
