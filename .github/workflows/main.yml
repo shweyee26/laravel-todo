@@ -19,19 +19,12 @@ jobs:
         host: ${{ secrets.SERVER_IP }}
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.PORT }}
+        port: ${{ secrets.SERVER_PORT }}
         script: |
-
           echo "===== DEPLOY START ====="
-
-          # install git if not exists
           sudo apt update -y
           sudo apt install -y git
-
-          # folder
           cd /var/www
-
-          # clone or update repo
           if [ ! -d "laravel-todo" ]; then
               sudo git clone https://github.com/devktops/laravel-todo.git
           else
@@ -39,6 +32,5 @@ jobs:
               sudo git pull origin main
               cd ..
           fi
-
           echo "===== FILES AFTER DEPLOY ====="
           ls -la /var/www/laravel-todo
