@@ -20,48 +20,83 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
+
         script: |
           echo "===== DEPLOY START ====="
-          
-          # ၁။ Apache Web Server သွင်းခြင်းနှင့် စတင်ခြင်း
-          echo "===== INSTALLING APACHE ====="
-          sudo DEBIAN_FRONTEND=noninteractive apt update -y
-          sudo DEBIAN_FRONTEND=noninteractive apt install -y git apache2
+
+          # =========================
+          # 1. SYSTEM PACKAGES
+          # =========================
+          sudo apt update -y
+
+          sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+            git \
+            apache2 \
+            php \
+            php-cli \
+            php-mbstring \
+            php-xml \
+            php-bcmath \
+            php-curl \
+            php-mysql \
+            php-zip \
+            php-gd \
+            php-intl \
+            unzip \
+            curl
+
+          # =========================
+          # 2. COMPOSER
+          # =========================
+          if ! command -v composer &> /dev/null
+          then
+            echo "Installing Composer..."
+            curl -sS https://getcomposer.org/installer | php
+            sudo mv composer.phar /usr/local/bin/composer
+          fi
+
           sudo systemctl enable apache2
           sudo systemctl start apache2
 
-          # ၂။ Git Repository တည်ဆောက်ခြင်းနှင့် Code ဆွဲယူခြင်း
-          echo "===== UPDATING CODE FROM GIT ====="
+          # =========================
+          # 3. CODE DEPLOY
+          # =========================
           sudo mkdir -p /var/www
-          
-          # အကယ်၍ အရင်က home အောက်မှာ မှားရောက်နေခဲ့လျှင် /var/www အောက်သို့ အတင်းရွှေ့ပစ်ရန်
-          if [ -d "/home/ubuntu/laravel-todo" ]; then
-              sudo mv /home/ubuntu/laravel-todo /var/www/
-          fi
 
           if [ ! -d "/var/www/laravel-todo" ]; then
               cd /var/www
               sudo git clone https://github.com/devktops/laravel-todo.git
           else
               cd /var/www/laravel-todo
-              sudo git pull origin main
+              sudo git reset --hard
+              sudo git pull origin master
           fi
 
-          # ၃။ Laravel အတွင်းပိုင်း လိုအပ်သည်များ ဆောင်ရွက်ခြင်း
+          # =========================
+          # 4. LARAVEL SETUP
+          # =========================
           cd /var/www/laravel-todo
+
           echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+
           sudo composer install --no-dev --optimize-autoloader --no-interaction
-          sudo php artisan key:generate --force
+
+          sudo php artisan key:generate --force || true
+          sudo php artisan config:clear
+          sudo php artisan cache:clear
+          sudo php artisan route:clear
+
           sudo php artisan migrate --force
 
-          # ၄။ Folder Permission အားလုံးကို Apache ဖတ်နိုင်ရန် ပြောင်းလဲခြင်း
-          echo "===== SETTING PERMISSIONS ====="
+          # =========================
+          # 5. PERMISSIONS (FIXED)
+          # =========================
           sudo chown -R www-data:www-data /var/www/laravel-todo
-          sudo chmod -R 775 /var/www/laravel-todo/storage
-          sudo chmod -R 775 /var/www/laravel-todo/bootstrap/cache
+          sudo chmod -R 777 storage bootstrap/cache
 
-          # ၅။ Apache Default Config ဖိုင်ကို အမှားအယွင်းမရှိစေရန် အသစ်အပြည့်အစုံ ရေးသားအစားထိုးခြင်း
-          echo "===== REWRITING APACHE CONFIG ====="
+          # =========================
+          # 6. SAFE APACHE CONFIG
+          # =========================
           sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
           <VirtualHost *:80>
               ServerAdmin webmaster@localhost
@@ -78,10 +113,17 @@ jobs:
           </VirtualHost>
           EOF
 
-          # ၆။ Apache mod_rewrite ကို ဖွင့်ပြီး Web Server ကို Restart ချခြင်း
+          # =========================
+          # 7. APACHE SAFE RESTART
+          # =========================
           sudo a2enmod rewrite
+          sudo apache2ctl configtest
           sudo systemctl restart apache2
 
-          echo "===== FILES AFTER DEPLOY ====="
+          # =========================
+          # 8. FINAL CHECK
+          # =========================
+          echo "===== FILE LIST ====="
           ls -la /var/www/laravel-todo
-          echo "===== DEPLOYMENT SUCCESSFUL ====="
+
+          echo "===== DEPLOY DONE ====="
