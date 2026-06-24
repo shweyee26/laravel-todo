@@ -61,34 +61,33 @@ jobs:
           fi
 
           # =========================
-          # 4. LARAVEL SETUP (IMPORTANT FIX PART)
+          # 4. LARAVEL FIXED SETUP
           # =========================
           cd /var/www/laravel-todo
 
+          # 🔥 FIX .env permission issue
+          sudo touch .env
+          sudo chmod 666 .env
+
           echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
 
+          # install dependencies
           sudo composer install --no-dev --optimize-autoloader --no-interaction
 
+          # 🔥 FIX APP KEY issue
           php artisan key:generate --force || true
 
-          # CLEAR EVERYTHING (IMPORTANT FOR 500 FIX)
+          # clear broken cache state
           php artisan optimize:clear
 
           # =========================
-          # 5. PERMISSIONS (CRITICAL FIX)
+          # 5. PERMISSIONS FIX
           # =========================
           sudo chown -R www-data:www-data /var/www/laravel-todo
           sudo chmod -R 777 storage bootstrap/cache
 
           # =========================
-          # 6. CACHE REBUILD (IMPORTANT FIX)
-          # =========================
-          php artisan config:cache || true
-          php artisan route:cache || true
-          php artisan view:cache || true
-
-          # =========================
-          # 7. APACHE CONFIG
+          # 6. APACHE CONFIG
           # =========================
           sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
           <VirtualHost *:80>
@@ -96,6 +95,7 @@ jobs:
               DocumentRoot /var/www/laravel-todo/public
 
               <Directory /var/www/laravel-todo/public>
+                  Options Indexes FollowSymLinks
                   AllowOverride All
                   Require all granted
               </Directory>
@@ -106,14 +106,14 @@ jobs:
           EOF
 
           # =========================
-          # 8. APACHE SAFE RESTART
+          # 7. SAFE RESTART
           # =========================
           sudo a2enmod rewrite
           sudo apache2ctl configtest
           sudo systemctl restart apache2
 
           # =========================
-          # 9. FINAL CHECK
+          # 8. FINAL CHECK
           # =========================
           echo "===== DEPLOY DONE ====="
           ls -la /var/www/laravel-todo
