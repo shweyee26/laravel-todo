@@ -22,16 +22,19 @@ jobs:
         port: ${{ secrets.SERVER_PORT }}
         script: |
           echo "===== DEPLOY START ====="
-        
+          
+          # ၁။ Apache Web Server သွင်းခြင်းနှင့် စတင်ခြင်း
           echo "===== INSTALLING APACHE ====="
           sudo DEBIAN_FRONTEND=noninteractive apt update -y
           sudo DEBIAN_FRONTEND=noninteractive apt install -y git apache2
           sudo systemctl enable apache2
           sudo systemctl start apache2
 
+          # ၂။ Git Repository တည်ဆောက်ခြင်းနှင့် Code ဆွဲယူခြင်း
           echo "===== UPDATING CODE FROM GIT ====="
           sudo mkdir -p /var/www
           
+          # အကယ်၍ အရင်က home အောက်မှာ မှားရောက်နေခဲ့လျှင် /var/www အောက်သို့ အတင်းရွှေ့ပစ်ရန်
           if [ -d "/home/ubuntu/laravel-todo" ]; then
               sudo mv /home/ubuntu/laravel-todo /var/www/
           fi
@@ -44,25 +47,39 @@ jobs:
               sudo git pull origin main
           fi
 
+          # ၃။ Laravel အတွင်းပိုင်း လိုအပ်သည်များ ဆောင်ရွက်ခြင်း
           cd /var/www/laravel-todo
           echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
           sudo composer install --no-dev --optimize-autoloader --no-interaction
           sudo php artisan key:generate --force
           sudo php artisan migrate --force
 
+          # ၄။ Folder Permission အားလုံးကို Apache ဖတ်နိုင်ရန် ပြောင်းလဲခြင်း
           echo "===== SETTING PERMISSIONS ====="
           sudo chown -R www-data:www-data /var/www/laravel-todo
           sudo chmod -R 775 /var/www/laravel-todo/storage
           sudo chmod -R 775 /var/www/laravel-todo/bootstrap/cache
 
-          echo "===== CONFIGURING APACHE SITE ====="
-          sudo sed -i 's|DocumentRoot /var/www/html|DocumentRoot /var/www/laravel-todo/public|g' /etc/apache2/sites-available/000-default.conf
-          
-          if ! grep -q "<Directory /var/www/laravel-todo/public>" /etc/apache2/sites-available/000-default.conf; then
-            sudo sed -i '/<\/VirtualHost>/i \
-            <Directory /var/www/laravel-todo/public>\n    Options Indexes FollowSymLinks\n    AllowOverride All\n    Require all granted\n</Directory>' /etc/apache2/sites-available/000-default.conf
-          fi
+          # ၅။ Apache Default Config ဖိုင်ကို အမှားအယွင်းမရှိစေရန် အသစ်အပြည့်အစုံ ရေးသားအစားထိုးခြင်း
+          echo "===== REWRITING APACHE CONFIG ====="
+          sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
+          <VirtualHost *:80>
+              ServerAdmin webmaster@localhost
+              DocumentRoot /var/www/laravel-todo/public
 
+              <Directory /var/www/laravel-todo/public>
+                  Options Indexes FollowSymLinks
+                  AllowOverride All
+                  Require all granted
+              </Directory>
+
+              ErrorLog ${APACHE_LOG_DIR}/error.log
+              CustomLog ${APACHE_LOG_DIR}/access.log combined
+          </VirtualHost>
+          EOF
+
+          # ၆။ Apache mod_rewrite ကို ဖွင့်ပြီး Web Server ကို Restart ချခြင်း
+          sudo a2enmod rewrite
           sudo systemctl restart apache2
 
           echo "===== FILES AFTER DEPLOY ====="
