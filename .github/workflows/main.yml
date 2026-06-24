@@ -10,110 +10,114 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Deploy via SSH
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_IP }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
 
-        script: |
-          echo "===== DEPLOY START ====="
+          script: |
+            echo "===== DEPLOY START ====="
 
-          # =========================
-          # 1. SYSTEM PACKAGES
-          # =========================
-          sudo apt update -y
+            # =========================
+            # 1. Install packages
+            # =========================
+            sudo apt update -y
 
-          sudo DEBIAN_FRONTEND=noninteractive apt install -y \
-            git apache2 \
-            php php-cli php-mbstring php-xml php-bcmath php-curl php-mysql \
-            php-zip php-gd php-intl unzip curl
+            sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+              git apache2 \
+              php php-cli php-mbstring php-xml php-bcmath php-curl php-mysql \
+              php-zip php-gd php-intl unzip curl \
+              nodejs npm
 
-          # =========================
-          # 2. COMPOSER
-          # =========================
-          if ! command -v composer &> /dev/null
-          then
-            curl -sS https://getcomposer.org/installer | php
-            sudo mv composer.phar /usr/local/bin/composer
-          fi
+            # =========================
+            # 2. Install Composer
+            # =========================
+            if ! command -v composer >/dev/null 2>&1; then
+              curl -sS https://getcomposer.org/installer | php
+              sudo mv composer.phar /usr/local/bin/composer
+            fi
 
-          sudo systemctl enable apache2
-          sudo systemctl start apache2
+            sudo systemctl enable apache2
+            sudo systemctl start apache2
 
-          # =========================
-          # 3. CODE DEPLOY
-          # =========================
-          sudo mkdir -p /var/www
+            # =========================
+            # 3. Clone / Update Project
+            # =========================
+            sudo mkdir -p /var/www
 
-          if [ ! -d "/var/www/laravel-todo" ]; then
+            if [ ! -d "/var/www/laravel-todo" ]; then
               cd /var/www
               sudo git clone https://github.com/devktops/laravel-todo.git
-          else
+            else
               cd /var/www/laravel-todo
-              sudo git reset --hard
-              sudo git pull origin master
-          fi
+              sudo git fetch origin
+              sudo git reset --hard origin/master
+            fi
 
-          # =========================
-          # 4. LARAVEL FIXED SETUP
-          # =========================
-          cd /var/www/laravel-todo
+            cd /var/www/laravel-todo
 
-          # 🔥 FIX .env permission issue
-          sudo touch .env
-          sudo chmod 666 .env
+            # =========================
+            # 4. Environment
+            # =========================
+            sudo touch .env
+            sudo chmod 666 .env
 
-          echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+            echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
 
-          # install dependencies
-          sudo composer install --no-dev --optimize-autoloader --no-interaction
+            # =========================
+            # 5. Backend dependencies
+            # =========================
+            sudo composer install --no-dev --optimize-autoloader --no-interaction
 
-          # 🔥 FIX APP KEY issue
-          php artisan key:generate --force || true
+            # =========================
+            # 6. Frontend dependencies (IMPORTANT)
+            # =========================
+            npm install
+            npm run build
 
-          # clear broken cache state
-          php artisan optimize:clear
+            # =========================
+            # 7. Laravel commands
+            # =========================
+            php artisan key:generate --force || true
+            php artisan optimize:clear
+            php artisan migrate --force || true
 
-          # =========================
-          # 5. PERMISSIONS FIX
-          # =========================
-          sudo chown -R www-data:www-data /var/www/laravel-todo
-          sudo chmod -R 777 storage bootstrap/cache
+            # =========================
+            # 8. Permissions
+            # =========================
+            sudo chown -R www-data:www-data /var/www/laravel-todo
+            sudo chmod -R 775 storage bootstrap/cache
 
-          # =========================
-          # 6. APACHE CONFIG
-          # =========================
-          sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
-          <VirtualHost *:80>
-              ServerAdmin webmaster@localhost
-              DocumentRoot /var/www/laravel-todo/public
+            # =========================
+            # 9. Apache Configuration
+            # =========================
+            sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
+            <VirtualHost *:80>
+                ServerAdmin webmaster@localhost
+                DocumentRoot /var/www/laravel-todo/public
 
-              <Directory /var/www/laravel-todo/public>
-                  Options Indexes FollowSymLinks
-                  AllowOverride All
-                  Require all granted
-              </Directory>
+                <Directory /var/www/laravel-todo/public>
+                    AllowOverride All
+                    Require all granted
+                </Directory>
 
-              ErrorLog ${APACHE_LOG_DIR}/error.log
-              CustomLog ${APACHE_LOG_DIR}/access.log combined
-          </VirtualHost>
-          EOF
+                ErrorLog ${APACHE_LOG_DIR}/error.log
+                CustomLog ${APACHE_LOG_DIR}/access.log combined
+            </VirtualHost>
+            EOF
 
-          # =========================
-          # 7. SAFE RESTART
-          # =========================
-          sudo a2enmod rewrite
-          sudo apache2ctl configtest
-          sudo systemctl restart apache2
+            # =========================
+            # 10. Restart Apache
+            # =========================
+            sudo a2enmod rewrite
+            sudo apache2ctl configtest
+            sudo systemctl restart apache2
 
-          # =========================
-          # 8. FINAL CHECK
-          # =========================
-          echo "===== DEPLOY DONE ====="
-          ls -la /var/www/laravel-todo
+            echo "===== DEPLOY DONE ====="
+            ls -la public/build || true
