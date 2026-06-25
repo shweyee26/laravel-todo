@@ -109,9 +109,9 @@ sudo apt install -y mysql-server mysql-client
 ```
 
 ```mysql
-CREATE USER 'kt'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';
+CREATE USER 'user'@'localhost' IDENTIFIED WITH mysql_native_password BY 'userpassword';
 CREATE DATABASE laravel;
-GRANT ALL PRIVILEGES ON laravel.* TO 'kt'@'localhost';
-GRANT CSELECT, REFERENCES on *.* TO 'kt'@'localhost' WITH GRANT OPTION;
+GRANT ALL PRIVILEGES ON laravel.* TO 'user'@'localhost';
+GRANT CSELECT, REFERENCES on *.* TO 'user'@'localhost' WITH GRANT OPTION;
 FLUSH PRIVILEGES;
 ```
