@@ -109,9 +109,6 @@ jobs:
             # Install frontend dependencies
             npm install
 
-            # Clear old vite cache (IMPORTANT)
-            rm -rf public/build
-
             # Build Vite assets
             npm run build
 
@@ -122,7 +119,7 @@ jobs:
             # =========================
             # 7. Laravel commands
             # =========================
-            
+
             php artisan optimize:clear
             php artisan view:clear
             php artisan route:clear
