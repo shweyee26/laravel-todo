@@ -92,6 +92,7 @@ jobs:
             else
               cd /var/www/laravel-todo
               sudo git fetch origin
+              sudo git checkout main || sudo git checkout -b main origin/main
               sudo git reset --hard origin/main
             fi
 
