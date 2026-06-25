@@ -105,10 +105,10 @@ jobs:
             sudo chown -R ubuntu:ubuntu /var/www/laravel-todo
 
             # Install frontend dependencies
-            npm install
+            sudo npm install
 
             # Build Vite assets
-            npm run build
+            sudo npm run build
 
             # Return ownership to Apache
             sudo chown -R www-data:www-data /var/www/laravel-todo
