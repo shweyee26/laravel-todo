@@ -84,10 +84,16 @@ jobs:
             # =========================
             # Clone / Update
             # =========================
-            sudo rm -rf /var/www/laravel-todo
+            sudo mkdir -p /var/www
 
-            cd /var/www
-            sudo git clone https://github.com/devktops/laravel-todo.git
+            if [ ! -d "/var/www/laravel-todo" ]; then
+              cd /var/www
+              sudo git clone https://github.com/devktops/laravel-todo.git
+            else
+              cd /var/www/laravel-todo
+              sudo git fetch origin
+              sudo git reset --hard origin/master
+            fi
 
             cd /var/www/laravel-todo
 
