@@ -3,7 +3,7 @@ name: Deploy to Lightsail Ubuntu
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   test:
@@ -92,8 +92,8 @@ jobs:
             else
               cd /var/www/laravel-todo
               sudo git fetch origin
-              sudo git checkout master || sudo git checkout -b master origin/master
-              sudo git reset --hard origin/master
+              sudo git checkout main || sudo git checkout -b main origin/main
+              sudo git reset --hard origin/main
             fi
 
             cd /var/www/laravel-todo
