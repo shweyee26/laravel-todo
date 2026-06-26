@@ -101,15 +101,9 @@ jobs:
             # =========================
             # ENV
             # =========================
-            # =========================
-            # ENV (Overwrite မလုပ်ဘဲ မရှိမှ ဆောက်မည်)
-            # =========================
-            if [ ! -f .env ]; then
-              echo ".env file not found. Creating a new one from GitHub Secrets..."
-              echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
-            else
-              echo ".env file already exists. Skipping overwrite to keep local changes."
-            fi
+            sudo touch .env
+            echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+
             # =========================
             # Backend
             # =========================
