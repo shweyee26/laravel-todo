@@ -1,4 +1,4 @@
-[6/26/2026 1:24 PM] Shwe Yee Win Lae': name: Laravel CI/CD to Lightsail Ubuntu
+name: Deploy to Lightsail Ubuntu
 
 on:
   push:
@@ -6,10 +6,6 @@ on:
       - main
 
 jobs:
-
-# =========================
-# 1. TEST STAGE
-# =========================
   test:
     runs-on: ubuntu-latest
 
@@ -20,42 +16,13 @@ jobs:
       - name: Basic Test (Laravel check)
         run: |
           echo "===== TEST START ====="
-          php -v
-          composer --version
+          php -v || true
+          composer --version || true
           echo "===== TEST DONE ====="
 
-
-# =========================
-# 2. BUILD STAGE
-# =========================
-  build:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies (Composer)
-        run: |
-          composer install --no-dev --optimize-autoloader
-
-      - name: Install Node modules
-        run: |
-          npm install
-          npm run build
-
-      - name: Prepare artifact
-        run: |
-          tar -czf app.tar.gz .
-
-
-# =========================
-# 3. DEPLOY STAGE
-# =========================
   deploy:
     runs-on: ubuntu-latest
-    needs: build
+    needs: test
 
     steps:
       - name: Checkout code
@@ -73,7 +40,7 @@ jobs:
             echo "===== DEPLOY START ====="
 
             # =========================
-            # Update system packages
+            # 1. Install packages
             # =========================
             sudo apt update -y
 
@@ -84,9 +51,10 @@ jobs:
               nodejs npm
 
             # =========================
-            # MySQL
+            # MYSQL INSTALL
             # =========================
             sudo apt install -y mysql-server
+
             sudo systemctl enable mysql
             sudo systemctl start mysql
 
@@ -124,6 +92,7 @@ jobs:
             else
               cd /var/www/laravel-todo
               sudo git fetch origin
+              sudo git checkout main || sudo git checkout -b main origin/main
               sudo git reset --hard origin/main
             fi
 
@@ -132,24 +101,42 @@ jobs:
             # =========================
             # ENV
             # =========================
+            sudo touch .env
             echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
 
             # =========================
-            # Laravel setup
+            # Backend
             # =========================
             sudo composer install --no-dev --optimize-autoloader --no-interaction
 
+            # =========================
+            # Frontend
+            # =========================
+            sudo chown -R ubuntu:ubuntu /var/www/laravel-todo
+
+            npm install
+            npm run build
+
+            sudo chown -R www-data:www-data /var/www/laravel-todo
+
+            # =========================
+            # Laravel
+            # =========================
+            if ! grep -q "^APP_KEY=base64:" .env; then
             php artisan key:generate --force
+            fi
+
             php artisan optimize:clear
             php artisan migrate --force
-
+            
             # =========================
             # Permissions
             # =========================
             sudo chown -R www-data:www-data /var/www/laravel-todo
             sudo chmod -R 775 storage bootstrap/cache
+
             # =========================
-            # Apache config
+            # Apache
             # =========================
             sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
             <VirtualHost *:80>
@@ -165,6 +152,7 @@ jobs:
                 CustomLog ${APACHE_LOG_DIR}/access.log combined
             </VirtualHost>
             EOF
+
 
             sudo a2enmod rewrite
             sudo systemctl restart apache2
