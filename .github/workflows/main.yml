@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+# =========================
+# 1. TEST PIPELINE
+# =========================
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,14 +16,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Basic Test (Laravel check)
+      - name: PHP Check
         run: |
-          echo "===== TEST START ====="
-          php -v || true
-          composer --version || true
-          echo "===== TEST DONE ====="
+          php -v
+          composer --version
 
-  deploy:
+
+# =========================
+# 2. BUILD PIPELINE (FAST CI BUILD)
+# =========================
+  build:
     runs-on: ubuntu-latest
     needs: test
 
@@ -28,7 +33,41 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy via SSH
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install & Build Assets
+        run: |
+          npm install
+          npm run build
+
+      - name: Archive Build Files
+        run: |
+          tar -czf build.tar.gz public/ bootstrap/ storage/ vendor/ composer.lock .env.example || true
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-build
+          path: build.tar.gz
+
+
+# =========================
+# 3. DEPLOY PIPELINE (LIGHTWEIGHT)
+# =========================
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: laravel-build
+
+      - name: Deploy via SSH (FAST UPDATE ONLY)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -37,124 +76,29 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
 
           script: |
-            echo "===== DEPLOY START ====="
-
-            # =========================
-            # 1. Install packages
-            # =========================
-            sudo apt update -y
-
-            sudo DEBIAN_FRONTEND=noninteractive apt install -y \
-              git apache2 \
-              php php-cli php-mbstring php-xml php-bcmath php-curl php-mysql \
-              php-zip php-gd php-intl unzip curl \
-              nodejs npm
-
-            # =========================
-            # MYSQL INSTALL
-            # =========================
-            sudo apt install -y mysql-server
-
-            sudo systemctl enable mysql
-            sudo systemctl start mysql
-
-            sudo mysql -e "CREATE DATABASE IF NOT EXISTS laravel;"
-
-            sudo mysql -e "
-            CREATE USER IF NOT EXISTS 'user'@'localhost'
-            IDENTIFIED WITH mysql_native_password BY 'userpassword';
-            "
-
-            sudo mysql -e "
-            GRANT ALL PRIVILEGES ON laravel.* TO 'user'@'localhost';
-            FLUSH PRIVILEGES;
-            "
-
-            # =========================
-            # Composer
-            # =========================
-            if ! command -v composer >/dev/null 2>&1; then
-              curl -sS https://getcomposer.org/installer | php
-              sudo mv composer.phar /usr/local/bin/composer
-            fi
-
-            sudo systemctl enable apache2
-            sudo systemctl start apache2
-
-            # =========================
-            # Clone / Update
-            # =========================
-            sudo mkdir -p /var/www
-
-            if [ ! -d "/var/www/laravel-todo" ]; then
-              cd /var/www
-              sudo git clone https://github.com/shweyee26/laravel-todo.git
-            else
-              cd /var/www/laravel-todo
-              sudo git fetch origin
-              sudo git checkout main || sudo git checkout -b main origin/main
-              sudo git reset --hard origin/main
-            fi
+            echo "===== DEPLOY START (FAST MODE) ====="
 
             cd /var/www/laravel-todo
 
-            # =========================
-            # ENV
-            # =========================
-            sudo touch .env
-            echo "${{ secrets.ENV_FILE }}" | sudo tee .env > /dev/null
+            # Pull latest code only
+            sudo git fetch origin
+            sudo git reset --hard origin/main
 
-            # =========================
-            # Backend
-            # =========================
-            sudo composer install --no-dev --optimize-autoloader --no-interaction
+            # Install dependencies only (no OS install!)
+            composer install --no-dev --optimize-autoloader --no-interaction
 
-            # =========================
-            # Frontend
-            # =========================
-            sudo chown -R ubuntu:ubuntu /var/www/laravel-todo
-
-            npm install
-            npm run build
-
-            sudo chown -R www-data:www-data /var/www/laravel-todo
-
-            # =========================
-            # Laravel
-            # =========================
-            if ! grep -q "^APP_KEY=base64:" .env; then
-            php artisan key:generate --force
-            fi
-
+            # Laravel optimize
             php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+
+            # Migrate safely
             php artisan migrate --force
-            
-            # =========================
-            # Permissions
-            # =========================
+
+            # Permissions only
             sudo chown -R www-data:www-data /var/www/laravel-todo
             sudo chmod -R 775 storage bootstrap/cache
 
-            # =========================
-            # Apache
-            # =========================
-            sudo tee /etc/apache2/sites-available/000-default.conf > /dev/null << 'EOF'
-            <VirtualHost *:80>
-                ServerAdmin webmaster@localhost
-                DocumentRoot /var/www/laravel-todo/public
-
-                <Directory /var/www/laravel-todo/public>
-                    AllowOverride All
-                    Require all granted
-                </Directory>
-
-                ErrorLog ${APACHE_LOG_DIR}/error.log
-                CustomLog ${APACHE_LOG_DIR}/access.log combined
-            </VirtualHost>
-            EOF
-
-
-            sudo a2enmod rewrite
             sudo systemctl restart apache2
 
             echo "===== DEPLOY DONE ====="
